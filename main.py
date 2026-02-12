@@ -1,40 +1,25 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from transformers import pipeline
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 app = FastAPI()
-
-# Load emotion detection model
-emotion_analyzer = pipeline(
-    "text-classification",
-    model="j-hartmann/emotion-english-distilroberta-base",
-    return_all_scores=True
-)
+analyzer = SentimentIntensityAnalyzer()
 
 class TextInput(BaseModel):
     text: str
 
 @app.post("/analyze")
 def analyze_emotion(data: TextInput):
-    outputs = emotion_analyzer(data.text)
+    scores = analyzer.polarity_scores(data.text)
 
-    # Handle different pipeline output formats safely
-    if isinstance(outputs, list) and isinstance(outputs[0], list):
-        emotions = outputs[0]
+    if scores["compound"] >= 0.05:
+        emotion = "joy"
+    elif scores["compound"] <= -0.05:
+        emotion = "sadness"
     else:
-        emotions = outputs
-
-    top_emotion = max(emotions, key=lambda x: x["score"])
+        emotion = "neutral"
 
     return {
-        "emotion": top_emotion["label"],
-        "score": round(float(top_emotion["score"]), 2)
+        "emotion": emotion,
+        "confidence": abs(scores["compound"])
     }
-import os
-
-port = int(os.environ.get("PORT", 8000))
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
-
